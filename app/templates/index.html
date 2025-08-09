@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="main-col">
+  <section class="hero card">
+    <p class="kicker">AI Assistant • Productivity Unlocked</p>
+    <h2 class="title">
+      Welcome to <span class="accent">AI Assistant</span>
+    </h2>
+    <p class="subtitle">
+      Your modern, always-available AI assistant.<br>
+      Socialize, create, and automate — simply and securely.
+    </p>
+    <div class="actions">
+      {% if user_email %}
+        <span class="badge">👤 {{ user_email }}</span>
+        <a class="btn btn-primary" href="/api/me" target="_blank">Profile JSON</a>
+        <a class="btn" href="/auth/logout">Sign Out</a>
+        <a class="btn btn-secondary" href="/auth/login?force=1">Switch User</a>
+      {% else %}
+        <a class="btn btn-primary" href="/auth/login">Sign in with Cognito</a>
+        <a class="btn btn-secondary" href="/auth/login?force=1">Try Demo</a>
+      {% endif %}
+    </div>
+  </section>
+  <section class="grid">
+    <a class="feature card" href="/docs" target="_blank" rel="noreferrer">
+      <div class="icon">🤖</div>
+      <h3>Assistant API</h3>
+      <p>Socialize, generate, and automate with your AI assistant.</p>
+    </a>
+    <a class="feature card" href="/api/health" target="_blank">
+      <div class="icon">🩺</div>
+      <h3>System Health</h3>
+      <p>Monitor AI uptime and performance in real time.</p>
+    </a>
+    <a class="feature card" href="/auth/logout">
+      <div class="icon">🔒</div>
+      <h3>Session Control</h3>
+      <p>Sign out or switch users instantly.</p>
+    </a>
+    <a class="feature card" href="/social">
+      <div class="icon">💬</div>
+      <h3>Social</h3>
+      <p>Share updates and interact with the community.</p>
+    </a>
+    <a class="feature card" href="/people">
+      <div class="icon">🧑‍🤝‍🧑</div>
+      <h3>People</h3>
+      <p>Direct messages and connections.</p>
+    </a>
+  </section>
+  <section class="note card">
+    {% if user_email %}
+      {% include "recent.html" %}
+    {% endif %}
+    <p class="muted">
+      Tip: Interact with your AI assistant — ask questions, automate tasks, and explore creative ideas.<br>
+      <span style="color:var(--accent);font-weight:600;">Welcome to the future of productivity.</span>
+    </p>
+  </section>
+</main>
+{% endblock %}

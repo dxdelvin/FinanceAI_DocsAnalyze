@@ -1,0 +1,41 @@
+<section class="card recent">
+  <div class="recent-head">
+    <h3>Recent activity</h3>
+    {% if usage %}<span class="badge">Today: {{ usage.runs_today }} runs</span>{% endif %}
+  </div>
+  {% if recent_runs and recent_runs|length > 0 %}
+    <ul class="recent-list">
+      {% for r in recent_runs %}
+        <li>
+          <span class="pill">{{ r.type or "run" }}</span>
+          <span class="dim">{{ r.created_at }}</span>
+          <span class="status {{ r.status }}">{{ r.status }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No runs yet. Create one with the button below.</p>
+  {% endif %}
+  <div class="btn-row">
+    <form action="/api/runs" method="post" onsubmit="return createRun(event)">
+      <button class="btn btn-primary" type="submit">Create sample run</button>
+    </form>
+    <a class="btn" href="/api/runs" target="_blank">Open JSON</a>
+  </div>
+</section>
+
+<script>
+async function createRun(e){
+  e.preventDefault();
+  const res = await fetch('/api/runs', {
+    method:'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({type:'demo', payload:{hello:'world'}})
+  });
+  if(res.ok){ location.reload(); } else {
+    const t = await res.text();
+    alert('Failed: ' + t);
+  }
+  return false;
+}
+</script>

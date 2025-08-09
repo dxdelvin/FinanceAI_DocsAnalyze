@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "AI Assistant" }}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">🤖</span>
+          <span class="logo-text">AI Assistant</span>
+        </div>
+        <nav class="top-nav">
+          <a href="/" {% if request and request.url.path == '/' %}class="active"{% endif %}>Home</a>
+          <a href="/social" {% if request and request.url.path.startswith('/social') %}class="active"{% endif %}>Social</a>
+          <a href="/people" {% if request and request.url.path.startswith('/people') %}class="active"{% endif %}>People</a>
+          <a href="/profile" {% if request and request.url.path.startswith('/profile') %}class="active"{% endif %}>Profile</a>
+        </nav>
+        <button class="hamburger" aria-label="Menu" onclick="toggleSidebar()">☰</button>
+      </div>
+    </header>
+
+    <div class="main-app-layout">
+      <aside class="sidebar" id="sidebar">
+        <nav class="menu">
+          <a href="/" {% if request and request.url.path == '/' %}class="active"{% endif %}><span class="icon">🏠</span> Home</a>
+          <a href="/social" {% if request and request.url.path.startswith('/social') %}class="active"{% endif %}><span class="icon">💬</span> Social</a>
+          <a href="/people" {% if request and request.url.path.startswith('/people') %}class="active"{% endif %}><span class="icon">🧑‍🤝‍🧑</span> People</a>
+          <a href="/profile" {% if request and request.url.path.startswith('/profile') %}class="active"{% endif %}><span class="icon">👤</span> Profile</a>
+          <a href="/settings" {% if request and request.url.path.startswith('/settings') %}class="active"{% endif %}><span class="icon">⚙️</span> Settings</a>
+          <a href="/auth/logout"><span class="icon">🚪</span> Logout</a>
+        </nav>
+      </aside>
+      <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()" style="display:none"></div>
+      <main class="main-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <span>Built by DX and Aloysius</span>
+        <span class="footer-meta">Powered by FastAPI + Jinja2</span>
+      </div>
+    </footer>
+    <script>
+      function toggleSidebar() {
+        var sidebar = document.getElementById('sidebar');
+        var backdrop = document.getElementById('sidebar-backdrop');
+        if (sidebar.classList.contains('open')) {
+          sidebar.classList.remove('open');
+          backdrop.style.display = 'none';
+        } else {
+          sidebar.classList.add('open');
+          backdrop.style.display = 'block';
+        }
+      }
+      // Close sidebar on resize if desktop
+      window.addEventListener('resize', function() {
+        if(window.innerWidth > 900) {
+          document.getElementById('sidebar').classList.remove('open');
+          document.getElementById('sidebar-backdrop').style.display = 'none';
+        }
+      });
+    </script>
+  </body>
+</html>

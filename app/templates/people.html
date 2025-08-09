@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="/static/chat.css">
+
+<section class="chat-wrap">
+  <!-- LEFT: conversations + search -->
+  <aside class="side-col">
+    <div class="card">
+      <h3>People</h3>
+      <input type="text" id="search" placeholder="Search by name or email" oninput="searchUsers()" />
+      <ul id="userList" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Conversations</h3>
+      <ul id="connList" class="list"></ul>
+    </div>
+  </aside>
+
+  <!-- RIGHT: active DM -->
+  <div class="feed-col">
+    <div id="dmBox" class="card" style="display:none">
+      <div class="row">
+        <strong id="dmTitle">Pick a conversation</strong>
+        <button class="btn" style="margin-left:auto" onclick="resetDM()">Close</button>
+      </div>
+      <div id="dmMsgs" class="msgs" style="min-height:280px"></div>
+      <div class="row">
+        <input id="dmText" placeholder="Type a message…" />
+        <button class="btn" onclick="sendDM()">Send</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+let activeDM = null;
+let dmSocket = null;
+const ME_SUB = "{{ my_sub or '' }}";
+
+function fmt(d){ return new Date(d).toLocaleString(); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// --- helpers to show/hide DM panel ---
+function showDM(show){ document.getElementById('dmBox').style.display = show ? 'block' : 'none'; }
+function resetDM(){
+  activeDM = null;
+  if (dmSocket) { try { dmSocket.close(); } catch(e){} dmSocket = null; }
+  document.getElementById('dmTitle').innerText = 'Pick a conversation';
+  document.getElementById('dmMsgs').innerHTML = '';
+  const input = document.getElementById('dmText'); if (input) input.value = '';
+  showDM(false);
+}
+
+// --- users search / connect ---
+async function searchUsers(){
+  const q = document.getElementById('search').value.trim();
+  const ul = document.getElementById('userList');
+  if(!q){ ul.innerHTML=''; return; }
+  const r = await fetch('/api/chat/users?q=' + encodeURIComponent(q));
+  const data = await r.json();
+  ul.innerHTML='';
+  (data.items||[]).forEach(u => {
+    const name = u.given_name || u.email || u.sub;
+    const li = document.createElement('li');
+    li.innerHTML = `<div><strong>${escapeHtml(name)}</strong><div class="dim">${escapeHtml(u.email||'')}</div></div>
+      <button class="btn" onclick="connectUser('${u.sub}')">Connect</button>`;
+    ul.appendChild(li);
+  });
+}
+async function connectUser(sub){
+  await fetch('/api/chat/connect?target_sub=' + encodeURIComponent(sub), {method:'POST'});
+  loadConversations();
+}
+
+// --- conversations list (with last message preview) ---
+async function loadConversations(){
+  const r = await fetch('/api/chat/connections');
+  if(!r.ok){ console.error('Convs failed', await r.text()); return; }
+  const data = await r.json();
+  const list = data.conversations || [];  // [{peer_sub, peer_name, last_text, last_at}]
+  const ul = document.getElementById('connList'); ul.innerHTML='';
+  list.forEach(c => {
+    const name = c.peer_name || c.peer_sub;
+    const preview = c.last_text ? escapeHtml(c.last_text).slice(0, 90) : 'Start a conversation';
+    const li = document.createElement('li');
+    li.innerHTML = `<div><strong>${escapeHtml(name)}</strong><div class="dim">${preview}</div></div>
+      <button class="btn" onclick="openDM('${c.peer_sub}', '${encodeURIComponent(name)}')">Open</button>`;
+    ul.appendChild(li);
+  });
+  if(list.length===0){
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="dim">No conversations yet. Search someone and say hi!</div>`;
+    ul.appendChild(li);
+  }
+}
+
+// --- active DM panel ---
+function appendMsg(m){
+  const wrap = document.getElementById('dmMsgs');
+  const mine = (m.from === ME_SUB);
+  const div = document.createElement('div');
+  div.className = 'msg ' + (mine?'mine':'');
+  div.innerHTML = `<div class="bubble">${escapeHtml(m.text)}</div><div class="time dim">${fmt(m.created_at)}</div>`;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+async function openDM(sub, encName){
+  activeDM = sub;
+  const name = decodeURIComponent(encName || '');
+  document.getElementById('dmTitle').innerText = name ? ('DM with ' + name) : ('DM with ' + sub);
+  showDM(true);           // <-- open panel when a conversation is chosen
+  await loadDM();
+
+  if(dmSocket){ try{ dmSocket.close(); }catch{} }
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  dmSocket = new WebSocket(`${wsProto}://${location.host}/ws/dm/${encodeURIComponent(sub)}`);
+  dmSocket.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    if(data.type === 'dm' && data.item){ appendMsg(data.item); }
+  };
+}
+
+async function loadDM(){
+  if(!activeDM) return;
+  const r = await fetch('/api/chat/dm?with_sub=' + encodeURIComponent(activeDM));
+  if(!r.ok){ console.error('DM load failed', await r.text()); return; }
+  const data = await r.json();
+  const wrap = document.getElementById('dmMsgs'); wrap.innerHTML='';
+  (data.items||[]).reverse().forEach(appendMsg);
+}
+
+async function sendDM(){
+  const inp = document.getElementById('dmText');
+  const text = inp.value.trim(); if(!text) return;
+  await fetch('/api/chat/dm', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({to_sub: activeDM, text})
+  });
+  inp.value='';
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadConversations(); resetDM(); });
+</script>
+{% endblock %}
