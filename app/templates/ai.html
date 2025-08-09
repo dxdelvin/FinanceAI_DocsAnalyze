@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="/static/chat.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<section class="chat-wrap" style="grid-template-columns: 1.2fr .8fr">
+  <!-- Chat -->
+  <div class="feed-col">
+    <div class="card header-card">
+      <h3>FinDoc Chat</h3>
+      <div class="spacer"></div>
+      {% if is_authed %}
+        <span class="tag">Signed in</span>
+      {% else %}
+        <a class="btn" href="/auth/login?force=1&next=/ai">Login</a>
+      {% endif %}
+    </div>
+
+    <div id="msgs" class="card msgs-board">
+      <div class="msg">
+        <div class="bubble">
+          Ask finance questions or upload a small file. Try:
+          <div class="dim" style="margin-top:.25rem">
+            <code>Show a chart of AAPL trend (demo)</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="gap:.5rem; flex-wrap:wrap;">
+        <input type="file" id="file">
+        <button class="btn" onclick="attach()">Attach</button>
+        <div id="attachments" class="dim"></div>
+      </div>
+      <div class="row" style="margin-top:.5rem; gap:.5rem;">
+        <input id="q" placeholder="Type your question…" style="flex:1">
+        <button class="btn btn-primary" onclick="ask()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report -->
+  <aside class="side-col">
+    <div class="card">
+      <h3 style="margin-top:0">Report</h3>
+      <div id="reportSummary" class="dim">Charts and tables appear here if relevant.</div>
+      <div id="charts"></div>
+    </div>
+  </aside>
+</section>
+
+<script>
+let history = [];          // {role, content}
+let attached = [];         // {file_id, filename}
+let charts = [];
+
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function addMsg(role, text){
+  const wrap = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role==='user' ? 'mine' : '');
+  div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  history.push({role, content: text});
+}
+
+async function attach(){
+  const f = document.getElementById('file').files[0];
+  if(!f){ alert('Choose a file'); return; }
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch('/api/ai/upload', { method:'POST', body: fd });
+  if(!r.ok){ return alert('Upload failed: ' + await r.text()); }
+  const data = await r.json();
+  attached.push({ file_id: data.file_id, filename: data.filename });
+  document.getElementById('attachments').textContent = attached.map(a => a.filename).join(', ');
+}
+
+function clearCharts(){
+  charts.forEach(c => c.destroy()); charts = [];
+  document.getElementById('charts').innerHTML = '';
+  document.getElementById('reportSummary').textContent = 'Charts and tables appear here if relevant.';
+}
+
+function renderReport(rep){
+  if(!rep){ clearCharts(); return; }
+  document.getElementById('reportSummary').textContent = rep.summary || rep.title || 'Report';
+  const host = document.getElementById('charts');
+  (rep.charts || []).forEach(cfg => {
+    const canvas = document.createElement('canvas');
+    canvas.style.height = '220px';
+    canvas.style.marginTop = '.5rem';
+    host.appendChild(canvas);
+    const chart = new Chart(canvas.getContext('2d'), {
+      type: cfg.type || 'line',
+      data: {
+        labels: cfg.labels || [],
+        datasets: (cfg.series || []).map(s => ({ label: s.name || 'Series', data: s.data || [] }))
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+    charts.push(chart);
+  });
+}
+
+async function ask(){
+  const box = document.getElementById('q');
+  const q = box.value.trim();
+  if(!q) return;
+  addMsg('user', q);
+  box.value = '';
+
+  const r = await fetch('/api/ai/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ message: q, history, attachments: attached.map(a => a.file_id) })
+  });
+  if(!r.ok){ return addMsg('assistant', 'Sorry, something went wrong: ' + await r.text()); }
+  const data = await r.json();
+  addMsg('assistant', data.answer || '(no answer)');
+  clearCharts();
+  renderReport(data.report);
+}
+</script>
+{% endblock %}

@@ -2,13 +2,13 @@
 {% block content %}
 <main class="main-col">
   <section class="hero card">
-    <p class="kicker">AI Assistant • Productivity Unlocked</p>
+    <p class="kicker">FinDocGPT • Your Finance Unlocked</p>
     <h2 class="title">
-      Welcome to <span class="accent">AI Assistant</span>
+      Welcome to <span class="accent">FinDocGPT</span>
     </h2>
     <p class="subtitle">
-      Your modern, always-available AI assistant.<br>
-      Socialize, create, and automate — simply and securely.
+      AI-powered financial document analysis, forecasting, and investment strategy.<br>
+      Analyze, predict, and make smarter investment decisions in real time.
     </p>
     <div class="actions">
       {% if user_email %}
@@ -23,30 +23,20 @@
     </div>
   </section>
   <section class="grid">
-    <a class="feature card" href="/docs" target="_blank" rel="noreferrer">
-      <div class="icon">🤖</div>
-      <h3>Assistant API</h3>
-      <p>Socialize, generate, and automate with your AI assistant.</p>
-    </a>
-    <a class="feature card" href="/api/health" target="_blank">
-      <div class="icon">🩺</div>
-      <h3>System Health</h3>
-      <p>Monitor AI uptime and performance in real time.</p>
-    </a>
-    <a class="feature card" href="/auth/logout">
-      <div class="icon">🔒</div>
-      <h3>Session Control</h3>
-      <p>Sign out or switch users instantly.</p>
-    </a>
     <a class="feature card" href="/social">
-      <div class="icon">💬</div>
+      <div class="icon">�</div>
       <h3>Social</h3>
-      <p>Share updates and interact with the community.</p>
+      <p>Share updates, interact with the community, and follow financial news.</p>
     </a>
     <a class="feature card" href="/people">
       <div class="icon">🧑‍🤝‍🧑</div>
-      <h3>People</h3>
-      <p>Direct messages and connections.</p>
+      <h3>Chat</h3>
+      <p>Direct message, connect, and collaborate with others in real time.</p>
+    </a>
+    <a class="feature card" href="/ai">
+      <div class="icon">🤖</div>
+      <h3>AI: FinDocGPT</h3>
+      <p>Analyze financial documents, predict trends, and get investment recommendations—all in one place.</p>
     </a>
   </section>
   <section class="note card">
@@ -54,8 +44,8 @@
       {% include "recent.html" %}
     {% endif %}
     <p class="muted">
-      Tip: Interact with your AI assistant — ask questions, automate tasks, and explore creative ideas.<br>
-      <span style="color:var(--accent);font-weight:600;">Welcome to the future of productivity.</span>
+      Tip: Use FinDocGPT to analyze financial documents, predict trends, and get investment recommendations.<br>
+      <span style="color:var(--accent);font-weight:600;">Empowering your financial decisions with AI.</span>
     </p>
   </section>
 </main>

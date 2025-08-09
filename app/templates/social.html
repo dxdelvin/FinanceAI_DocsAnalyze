@@ -7,62 +7,102 @@
     <textarea id="postText" rows="3" maxlength="1000" placeholder="Share something clever…"></textarea>
     <div class="row">
       <button class="btn btn-primary" onclick="sendPost()">Post</button>
-      <span id="postStatus" class="muted"></span>
+      <button id="loadMore" class="btn" style="display:none;margin-left:auto" onclick="loadFeed(true)">Load more</button>
     </div>
   </div>
 
   <div id="feed"></div>
-  <button id="loadMore" class="btn" style="display:none" onclick="loadFeed(true)">Load more</button>
 </section>
 
 <script>
 let cursor = null;
 
-function fmt(d){ return new Date(d).toLocaleString(); }
-function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+const fmt = d => new Date(d).toLocaleString();
+const escapeHtml = s => s.replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
 async function sendPost(){
   const el = document.getElementById('postText');
   const text = el.value.trim();
   if(!text) return;
-  const r = await fetch('/api/chat/post', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text})
+
+  const r = await fetch('/api/social/post', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ text })
   });
-  if(r.ok){ el.value=''; cursor=null; document.getElementById('feed').innerHTML=''; loadFeed(); }
-  else { alert('Post failed: ' + (await r.text())); }
+
+  if (r.ok) {
+    el.value = '';
+    document.getElementById('feed').innerHTML = '';
+    cursor = null;
+    loadFeed();
+  } else if (r.status === 401) {
+    alert('Please login to post.');
+  } else {
+    alert('Post failed: ' + (await r.text()));
+  }
 }
 
 function postCard(p){
-  const likedBtn = `<button class="btn" onclick="likePost('${p.post_id}')">♥ ${p.like_count||0}</button>`;
-  const repostBtn = `<button class="btn" onclick="repostPost('${p.post_id}')">↻ ${p.repost_count||0}</button>`;
   return `<div class="post card">
-    <div class="meta"><strong>${escapeHtml(p.author_name||'anon')}</strong>
-      <span class="dim" style="margin-left:.5rem">${fmt(p.created_at)}</span></div>
+    <div class="meta">
+      <strong>${escapeHtml(p.author_name || 'anon')}</strong>
+      <span class="dim" style="margin-left:.5rem">${fmt(p.created_at)}</span>
+    </div>
     <div class="text">${escapeHtml(p.text).replace(/\n/g,'<br>')}</div>
-    <div class="row">${likedBtn} ${repostBtn}</div>
+    <div class="row" style="gap:.5rem">
+      <button class="btn" onclick="likePost('${p.post_id}')">♥ ${p.like_count || 0}</button>
+      <button class="btn" onclick="repostPost('${p.post_id}')">↻ ${p.repost_count || 0}</button>
+    </div>
   </div>`;
 }
 
 async function loadFeed(more=false){
-  let url = '/api/chat/feed?limit=10';
-  if(more && cursor) url += '&cursor=' + encodeURIComponent(cursor);
-  const r = await fetch(url);
-  if(!r.ok){ console.error('Feed failed', await r.text()); return; }
-  const data = await r.json();
+  let url = '/api/social/feed?limit=10';
+  if (more && cursor) url += '&cursor=' + encodeURIComponent(cursor);
+
   const wrap = document.getElementById('feed');
-  (data.items||[]).forEach(p => wrap.insertAdjacentHTML('beforeend', postCard(p)));
+  const r = await fetch(url);
+
+  if (!r.ok) {
+    wrap.innerHTML = `<div class="card dim">Failed to load feed: ${await r.text()}</div>`;
+    return;
+  }
+
+  const data = await r.json();
+  const items = data.items || [];
+
+  if (!more) wrap.innerHTML = '';
+  if (items.length === 0 && !data.next) {
+    wrap.innerHTML = `<div class="card dim">No posts yet. Be the first!</div>`;
+  } else {
+    items.forEach(p => wrap.insertAdjacentHTML('beforeend', postCard(p)));
+  }
+
   cursor = data.next || null;
   document.getElementById('loadMore').style.display = cursor ? 'inline-block' : 'none';
 }
 
 async function likePost(id){
-  await fetch('/api/chat/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});
-  document.getElementById('feed').innerHTML=''; cursor=null; loadFeed();
+  await fetch('/api/social/like', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ post_id: id })
+  });
+  document.getElementById('feed').innerHTML = '';
+  cursor = null;
+  loadFeed();
 }
+
 async function repostPost(id){
-  await fetch('/api/chat/repost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});
-  document.getElementById('feed').innerHTML=''; cursor=null; loadFeed();
+  await fetch('/api/social/repost', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ post_id: id })
+  });
+  document.getElementById('feed').innerHTML = '';
+  cursor = null;
+  loadFeed();
 }
 
 document.addEventListener('DOMContentLoaded', () => loadFeed());

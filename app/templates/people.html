@@ -7,12 +7,14 @@
   <aside class="side-col">
     <div class="card">
       <h3>People</h3>
-      <input type="text" id="search" placeholder="Search by name or email" oninput="searchUsers()" />
+      <div class="dim" id="peopleStatus" style="margin-bottom:.25rem;"></div>
+      <input type="text" id="search" placeholder="Search by name or email" />
       <ul id="userList" class="list"></ul>
     </div>
 
     <div class="card">
       <h3>Conversations</h3>
+      <div class="dim" id="convStatus" style="margin-bottom:.25rem;"></div>
       <ul id="connList" class="list"></ul>
     </div>
   </aside>
@@ -22,82 +24,154 @@
     <div id="dmBox" class="card" style="display:none">
       <div class="row">
         <strong id="dmTitle">Pick a conversation</strong>
-        <button class="btn" style="margin-left:auto" onclick="resetDM()">Close</button>
+        <button class="btn" style="margin-left:auto" id="dmCloseBtn">Close</button>
       </div>
       <div id="dmMsgs" class="msgs" style="min-height:280px"></div>
       <div class="row">
         <input id="dmText" placeholder="Type a message…" />
-        <button class="btn" onclick="sendDM()">Send</button>
+        <button class="btn" id="dmSendBtn">Send</button>
       </div>
     </div>
   </div>
 </section>
 
 <script>
+/* ---------- auth + globals ---------- */
+const ME_SUB = "{{ my_sub or '' }}";
+const IS_AUTHED = {{ 'true' if is_authed else 'false' }};
 let activeDM = null;
 let dmSocket = null;
-const ME_SUB = "{{ my_sub or '' }}";
 
-function fmt(d){ return new Date(d).toLocaleString(); }
-function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+/* ---------- tiny utils ---------- */
+function fmt(d){ try { return new Date(d).toLocaleString(); } catch { return d; } }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function $(id){ return document.getElementById(id); }
+function setText(id, txt){ const el=$(id); if(el) el.textContent=txt||''; }
+function debounce(fn, ms=250){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
-// --- helpers to show/hide DM panel ---
-function showDM(show){ document.getElementById('dmBox').style.display = show ? 'block' : 'none'; }
+/* ---------- DM panel show/hide ---------- */
+function showDM(show){ $('dmBox').style.display = show ? 'block' : 'none'; }
 function resetDM(){
   activeDM = null;
   if (dmSocket) { try { dmSocket.close(); } catch(e){} dmSocket = null; }
-  document.getElementById('dmTitle').innerText = 'Pick a conversation';
-  document.getElementById('dmMsgs').innerHTML = '';
-  const input = document.getElementById('dmText'); if (input) input.value = '';
+  setText('dmTitle', 'Pick a conversation');
+  $('dmMsgs').innerHTML = '';
+  const input = $('dmText'); if (input) input.value = '';
   showDM(false);
 }
 
-// --- users search / connect ---
-async function searchUsers(){
-  const q = document.getElementById('search').value.trim();
-  const ul = document.getElementById('userList');
-  if(!q){ ul.innerHTML=''; return; }
-  const r = await fetch('/api/chat/users?q=' + encodeURIComponent(q));
-  const data = await r.json();
-  ul.innerHTML='';
-  (data.items||[]).forEach(u => {
-    const name = u.given_name || u.email || u.sub;
-    const li = document.createElement('li');
-    li.innerHTML = `<div><strong>${escapeHtml(name)}</strong><div class="dim">${escapeHtml(u.email||'')}</div></div>
-      <button class="btn" onclick="connectUser('${u.sub}')">Connect</button>`;
-    ul.appendChild(li);
-  });
-}
-async function connectUser(sub){
-  await fetch('/api/chat/connect?target_sub=' + encodeURIComponent(sub), {method:'POST'});
-  loadConversations();
-}
+/* ---------- People search (with debounce) ---------- */
+const doSearch = debounce(async function(){
+  const q = $('search').value.trim();
+  const ul = $('userList');
+  ul.innerHTML = '';
+  if(!q){
+    setText('peopleStatus', '');
+    return;
+  }
+  if(!IS_AUTHED){
+    setText('peopleStatus', 'Please sign in to search people.');
+    return;
+  }
+  setText('peopleStatus', 'Searching…');
+  try {
+    const r = await fetch('/api/chat/users?q=' + encodeURIComponent(q));
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({detail:r.statusText}));
+      setText('peopleStatus', 'Search failed: ' + (err.detail||''));
+      return;
+    }
+    const data = await r.json();
+    const items = data.items || [];
+    if (items.length === 0) {
+      setText('peopleStatus', 'No matches.');
+      return;
+    }
+    setText('peopleStatus', '');
+    for (const u of items) {
+      const name = u.given_name || u.email || u.sub;
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div>
+          <strong>${escapeHtml(name)}</strong>
+          <div class="dim">${escapeHtml(u.email||'')}</div>
+        </div>
+        <button class="btn connectBtn" data-sub="${escapeHtml(u.sub)}">Connect</button>
+      `;
+      ul.appendChild(li);
+    }
+  } catch (e) {
+    setText('peopleStatus', 'Network error while searching.');
+  }
+}, 250);
 
-// --- conversations list (with last message preview) ---
-async function loadConversations(){
-  const r = await fetch('/api/chat/connections');
-  if(!r.ok){ console.error('Convs failed', await r.text()); return; }
-  const data = await r.json();
-  const list = data.conversations || [];  // [{peer_sub, peer_name, last_text, last_at}]
-  const ul = document.getElementById('connList'); ul.innerHTML='';
-  list.forEach(c => {
-    const name = c.peer_name || c.peer_sub;
-    const preview = c.last_text ? escapeHtml(c.last_text).slice(0, 90) : 'Start a conversation';
-    const li = document.createElement('li');
-    li.innerHTML = `<div><strong>${escapeHtml(name)}</strong><div class="dim">${preview}</div></div>
-      <button class="btn" onclick="openDM('${c.peer_sub}', '${encodeURIComponent(name)}')">Open</button>`;
-    ul.appendChild(li);
-  });
-  if(list.length===0){
-    const li = document.createElement('li');
-    li.innerHTML = `<div class="dim">No conversations yet. Search someone and say hi!</div>`;
-    ul.appendChild(li);
+async function onConnectClick(sub, btn){
+  if (!IS_AUTHED) {
+    alert('Please sign in to connect.');
+    return;
+  }
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = 'Connecting…';
+  try {
+    const r = await fetch('/api/chat/connect?target_sub=' + encodeURIComponent(sub), { method:'POST' });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({detail:r.statusText}));
+      alert('Connect failed: ' + (err.detail || 'Unknown error'));
+    } else {
+      btn.textContent = 'Connected';
+      btn.disabled = true;
+      await loadConversations();
+    }
+  } catch (e) {
+    alert('Network error while connecting.');
+    btn.textContent = old;
+    btn.disabled = false;
   }
 }
 
-// --- active DM panel ---
+/* ---------- Conversations list ---------- */
+async function loadConversations(){
+  const ul = $('connList'); ul.innerHTML = '';
+  setText('convStatus', IS_AUTHED ? 'Loading…' : 'Please sign in to see conversations.');
+  if(!IS_AUTHED) return;
+  try {
+    const r = await fetch('/api/chat/connections');
+    if(!r.ok){
+      const err = await r.json().catch(()=>({detail:r.statusText}));
+      setText('convStatus', 'Failed: ' + (err.detail||''));
+      return;
+    }
+    const data = await r.json();
+    const list = data.conversations || [];
+    setText('convStatus', '');
+    if(list.length===0){
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="dim">No conversations yet. Search someone and say hi!</div>`;
+      ul.appendChild(li);
+      return;
+    }
+    list.forEach(c => {
+      const name = c.peer_name || c.peer_sub;
+      const preview = c.last_text ? escapeHtml(c.last_text).slice(0, 90) : 'Start a conversation';
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div>
+          <strong>${escapeHtml(name)}</strong>
+          <div class="dim">${preview}</div>
+        </div>
+        <button class="btn openBtn" data-sub="${escapeHtml(c.peer_sub)}" data-name="${encodeURIComponent(name)}">Open</button>
+      `;
+      ul.appendChild(li);
+    });
+  } catch (e) {
+    setText('convStatus', 'Network error while loading conversations.');
+  }
+}
+
+/* ---------- Active DM panel ---------- */
 function appendMsg(m){
-  const wrap = document.getElementById('dmMsgs');
+  const wrap = $('dmMsgs');
   const mine = (m.from === ME_SUB);
   const div = document.createElement('div');
   div.className = 'msg ' + (mine?'mine':'');
@@ -109,38 +183,92 @@ function appendMsg(m){
 async function openDM(sub, encName){
   activeDM = sub;
   const name = decodeURIComponent(encName || '');
-  document.getElementById('dmTitle').innerText = name ? ('DM with ' + name) : ('DM with ' + sub);
-  showDM(true);           // <-- open panel when a conversation is chosen
+  setText('dmTitle', name ? ('DM with ' + name) : ('DM with ' + sub));
+  showDM(true);
   await loadDM();
 
   if(dmSocket){ try{ dmSocket.close(); }catch{} }
   const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  dmSocket = new WebSocket(`${wsProto}://${location.host}/ws/dm/${encodeURIComponent(sub)}`);
-  dmSocket.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    if(data.type === 'dm' && data.item){ appendMsg(data.item); }
-  };
+  try {
+    dmSocket = new WebSocket(`${wsProto}://${location.host}/ws/dm/${encodeURIComponent(sub)}`);
+    dmSocket.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if(data.type === 'dm' && data.item){ appendMsg(data.item); }
+    };
+    dmSocket.onerror = () => { /* ignore for now */ };
+  } catch(e) {
+    // no-op; user can still send/refresh
+  }
 }
 
 async function loadDM(){
   if(!activeDM) return;
-  const r = await fetch('/api/chat/dm?with_sub=' + encodeURIComponent(activeDM));
-  if(!r.ok){ console.error('DM load failed', await r.text()); return; }
-  const data = await r.json();
-  const wrap = document.getElementById('dmMsgs'); wrap.innerHTML='';
-  (data.items||[]).reverse().forEach(appendMsg);
+  try {
+    const r = await fetch('/api/chat/dm?with_sub=' + encodeURIComponent(activeDM));
+    if(!r.ok){ return; }
+    const data = await r.json();
+    const wrap = $('dmMsgs'); wrap.innerHTML='';
+    (data.items||[]).reverse().forEach(appendMsg);
+  } catch(e) { /* ignore */ }
 }
 
 async function sendDM(){
-  const inp = document.getElementById('dmText');
+  const inp = $('dmText');
   const text = inp.value.trim(); if(!text) return;
-  await fetch('/api/chat/dm', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({to_sub: activeDM, text})
-  });
-  inp.value='';
+  if(!activeDM){ return; }
+  $('dmSendBtn').disabled = true;
+  try {
+    const r = await fetch('/api/chat/dm', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({to_sub: activeDM, text})
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({detail:r.statusText}));
+      alert('Send failed: ' + (err.detail||''));
+      return;
+    }
+    inp.value='';
+    await loadDM();
+  } catch(e){
+    alert('Network error while sending.');
+  } finally {
+    $('dmSendBtn').disabled = false;
+  }
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadConversations(); resetDM(); });
+/* ---------- Event delegation & init ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+  // Init states
+  resetDM();
+  if (!IS_AUTHED) {
+    setText('peopleStatus', 'Please sign in to search people.');
+  }
+  loadConversations();
+
+  // Debounced search on input
+  $('search').addEventListener('input', doSearch);
+
+  // Connect buttons (delegated)
+  $('userList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.connectBtn');
+    if (!btn) return;
+    const sub = btn.getAttribute('data-sub');
+    if (sub) onConnectClick(sub, btn);
+  });
+
+  // Open conversation buttons (delegated)
+  $('connList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.openBtn');
+    if (!btn) return;
+    const sub = btn.getAttribute('data-sub');
+    const name = btn.getAttribute('data-name') || '';
+    if (sub) openDM(sub, name);
+  });
+
+  // DM actions
+  $('dmCloseBtn').addEventListener('click', resetDM);
+  $('dmSendBtn').addEventListener('click', sendDM);
+  $('dmText').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendDM(); } });
+});
 </script>
 {% endblock %}

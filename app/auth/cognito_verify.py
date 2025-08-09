@@ -18,14 +18,8 @@ def _get_jwk_client() -> PyJWKClient:
     return _jwk_client
 
 def verify_jwt(token: str, audience: str) -> Dict[str, Any]:
-    """
-    Verifies RS256 JWT from Cognito using JWKS.
-    Checks signature, exp, iat, nbf, iss, aud.
-    Returns decoded claims dict on success; raises InvalidTokenError on failure.
-    """
-    jwk_client = _get_jwk_client()
-    signing_key = jwk_client.get_signing_key_from_jwt(token).key
     try:
+        signing_key = _get_jwk_client().get_signing_key_from_jwt(token).key
         claims = jwt.decode(
             token,
             signing_key,
@@ -35,11 +29,12 @@ def verify_jwt(token: str, audience: str) -> Dict[str, Any]:
             options={
                 "verify_signature": True,
                 "verify_exp": True,
-                "verify_iat": True,
+                "verify_iat": True,   
                 "verify_nbf": True,
                 "verify_iss": True,
                 "verify_aud": True,
             },
+            leeway=120,  # <-- allow 2 minutes clock skew
         )
         return claims
     except InvalidTokenError as e:
