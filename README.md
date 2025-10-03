@@ -1,7 +1,7 @@
 # AI Hackathon Starter (Python-first)
 
 A tiny, production-friendly starter that gives you a **Python FastAPI backend** and a **server-rendered frontend with Jinja2**.
-Perfect for hackathons when you want to ship fast without wrestling a separate JS frontend.
+(THE DOCS analyze Part is not Updated, its still work in progress what it does is it will Scan your DOCS not using OCR but Markdown Technique and can analyze Your Text more accurately with all tables and THE AI can answer your questions more accurately)
 
 <img width="1375" height="900" alt="Screenshot 2025-08-09 143243" src="https://github.com/user-attachments/assets/889b71cb-3152-48ea-bb7f-79f8f87eca6c" />
 <img width="1751" height="964" alt="Screenshot 2025-08-09 170003" src="https://github.com/user-attachments/assets/a9903bcf-83ef-46ae-ad03-80bf9a89ffcd" />
